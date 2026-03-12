@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
 using System.Diagnostics;
@@ -28,19 +29,38 @@ namespace TaskTray
             
             this.DoubleBuffered = true;
             
-            // Setup events
-            lstCategories.SelectedIndexChanged += OnCategoryChanged;
+            // Toolbar Events
             txtSearch.TextChanged += OnSearchChanged;
+            txtSearch.PlaceholderText = LanguageManager.GetString("Search");
+            
+            btnAddProgram.Text = LanguageManager.GetString("AddProgram");
             btnAddProgram.Click += OnAddProgramClicked;
             
             btnAddCategory.Click += OnAddCategoryClicked;
+            btnSettings.Click += (s, e) => ShowSettings();
+
+            // Category List (Owner Draw)
+            lstCategories.DrawItem += OnDrawCategoryItem;
+            lstCategories.SelectedIndexChanged += OnCategoryChanged;
+            lstCategories.MeasureItem += (s, e) => e.ItemHeight = 45;
+
+            // Action Bar Events
+            btnRenameCategory.Text = LanguageManager.GetString("RenameCategory");
             btnRenameCategory.Click += OnRenameCategoryClicked;
+            
+            btnDeleteCategory.Text = LanguageManager.GetString("Remove");
             btnDeleteCategory.Click += OnDeleteCategoryClicked;
+            
+            btnImport.Text = LanguageManager.GetString("Import");
+            btnImport.Click += OnImportClicked;
 
-            chkAutoStart.CheckedChanged += OnAutoStartChanged;
-            cmbLanguage.SelectedIndexChanged += OnLanguageChanged;
+            btnExport.Text = LanguageManager.GetString("Export");
+            btnExport.Click += OnExportClicked;
 
-            // Drag and drop
+            // Empty State Painting
+            pnlEmptyState.Paint += OnPaintEmptyState;
+
+            // Drag and Drop
             flowApps.AllowDrop = true;
             flowApps.DragEnter += OnDragEnter;
             flowApps.DragDrop += OnDragDrop;
@@ -52,19 +72,48 @@ namespace TaskTray
                     this.Hide();
                 }
             };
+        }
 
-            // Initialize settings UI
-            chkAutoStart.Checked = AutoStartManager.IsEnabled();
-            cmbLanguage.Items.Clear();
-            cmbLanguage.Items.AddRange(new string[] { "English", "Svenska" });
-            cmbLanguage.SelectedIndex = ConfigManager.Data.Language == "sv" ? 1 : 0;
-            
-            tabMain.SelectedIndexChanged += (s, e) => {
-                if (tabMain.SelectedTab == tabSettings)
+        private void OnImportClicked(object? sender, EventArgs e)
+        {
+            using (var ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*";
+                if (ofd.ShowDialog() == DialogResult.OK)
                 {
-                    chkAutoStart.Checked = AutoStartManager.IsEnabled();
+                    try
+                    {
+                        string json = System.IO.File.ReadAllText(ofd.FileName, System.Text.Encoding.UTF8);
+                        var imported = System.Text.Json.JsonSerializer.Deserialize<ConfigData>(json);
+                        if (imported != null)
+                        {
+                            ConfigManager.Data.Categories = imported.Categories;
+                            ConfigManager.Save();
+                            LoadData();
+                            TrayRefreshRequested?.Invoke(this, EventArgs.Empty);
+                        }
+                    }
+                    catch (Exception ex) { MessageBox.Show($"Import failed: {ex.Message}"); }
                 }
-            };
+            }
+        }
+
+        private void OnExportClicked(object? sender, EventArgs e)
+        {
+            using (var sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "JSON Files (*.json)|*.json";
+                if (sfd.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                        string json = System.Text.Json.JsonSerializer.Serialize(ConfigManager.Data, options);
+                        System.IO.File.WriteAllText(sfd.FileName, json, System.Text.Encoding.UTF8);
+                    }
+                    catch (Exception ex) { MessageBox.Show($"Export failed: {ex.Message}"); }
+                }
+            }
         }
 
         private void LoadData()
@@ -83,48 +132,210 @@ namespace TaskTray
             UpdateAppList();
         }
 
-        private void OnLanguageChanged(object? sender, EventArgs e)
+        private void OnDrawCategoryItem(object? sender, DrawItemEventArgs e)
         {
-            string newLang = cmbLanguage.SelectedIndex == 1 ? "sv" : "en";
-            if (ConfigManager.Data.Language != newLang)
+            if (e.Index < 0) return;
+
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            
+            bool isSelected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            Rectangle rect = e.Bounds;
+            rect.Inflate(-8, -4); // More padding for list items
+
+            Color bgColor = isSelected ? DesignSystem.AccentColor : Color.Transparent;
+            Color textColor = isSelected ? Color.Black : DesignSystem.TextColor;
+
+            if (isSelected)
             {
-                ConfigManager.Data.Language = newLang;
-                LanguageManager.SetLanguage(newLang);
-                ConfigManager.Save();
-                // Request restart or re-apply strings? 
-                // For simplicity, let's re-apply.
-                SetupUI();
-                LoadData();
-                RefreshTray();
+                DesignSystem.DrawRoundedRectangle(g, rect, 8, bgColor);
+            }
+            else if ((e.State & DrawItemState.Focus) == DrawItemState.Focus)
+            {
+                DesignSystem.DrawRoundedRectangle(g, rect, 8, DesignSystem.SurfaceElevatedColor);
+            }
+
+            string text = lstCategories.Items[e.Index].ToString() ?? "";
+            TextRenderer.DrawText(g, text, DesignSystem.HeaderFont, rect, textColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.LeftAndRightPadding);
+        }
+
+        private void OnPaintEmptyState(object? sender, PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle rect = pnlEmptyState.ClientRectangle;
+
+            // Draw a subtle "plus" icon in a circle
+            int circleSize = 60;
+            Rectangle circleRect = new Rectangle((rect.Width - circleSize) / 2, (rect.Height / 2) - 80, circleSize, circleSize);
+            using (SolidBrush brush = new SolidBrush(DesignSystem.SurfaceElevatedColor))
+            {
+                g.FillEllipse(brush, circleRect);
+            }
+            using (Pen pen = new Pen(DesignSystem.AccentColor, 3))
+            {
+                int margin = 18;
+                g.DrawLine(pen, circleRect.X + margin, circleRect.Y + circleSize / 2, circleRect.Right - margin, circleRect.Y + circleSize / 2);
+                g.DrawLine(pen, circleRect.X + circleSize / 2, circleRect.Y + margin, circleRect.X + circleSize / 2, circleRect.Bottom - margin);
+            }
+
+            // Draw text
+            string title = LanguageManager.GetString("EmptyStateTitle");
+            string desc = LanguageManager.GetString("EmptyStateDesc");
+
+            Rectangle titleRect = new Rectangle(0, circleRect.Bottom + 20, rect.Width, 30);
+            Rectangle descRect = new Rectangle(60, titleRect.Bottom + 10, rect.Width - 120, 80);
+
+            TextRenderer.DrawText(g, title, DesignSystem.TitleFont, titleRect, DesignSystem.TextColor, TextFormatFlags.HorizontalCenter);
+            TextRenderer.DrawText(g, desc, DesignSystem.MainFont, descRect, DesignSystem.TextDimColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.WordBreak);
+        }
+
+        private void UpdateAppList()
+        {
+            flowApps.Controls.Clear();
+            
+            if (_selectedCategory == null)
+            {
+                pnlEmptyState.Visible = true;
+                flowApps.Visible = false;
+                return;
+            }
+
+            var items = _selectedCategory.Items.AsEnumerable();
+            if (!string.IsNullOrEmpty(_searchFilter))
+            {
+                items = items.Where(i => i.Name.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!items.Any())
+            {
+                pnlEmptyState.Visible = true;
+                flowApps.Visible = false;
+            }
+            else
+            {
+                pnlEmptyState.Visible = false;
+                flowApps.Visible = true;
+                foreach (var app in items)
+                {
+                    flowApps.Controls.Add(CreateAppRow(app));
+                }
             }
         }
 
-        private void OnAutoStartChanged(object? sender, EventArgs e)
+        private Control CreateAppRow(AppItem app)
         {
-            AutoStartManager.SetEnabled(chkAutoStart.Checked);
-            ConfigManager.Data.AutoStart = chkAutoStart.Checked;
-            ConfigManager.Save();
+            Panel row = new Panel
+            {
+                Size = new Size(flowApps.Width - 50, 65),
+                BackColor = DesignSystem.SurfaceElevatedColor,
+                Margin = new Padding(0, 0, 0, 8),
+                Padding = new Padding(10),
+                Cursor = Cursors.Hand
+            };
+
+            // Custom border and corner logic could be added here if we want more flair
+            // For now, let's keep it clean with properties.
+
+            PictureBox pic = new PictureBox
+            {
+                Size = new Size(32, 32),
+                Location = new Point(15, 16),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = Color.Transparent
+            };
+
+            if (!string.IsNullOrEmpty(app.IconBase64))
+            {
+                try {
+                    byte[] bytes = Convert.FromBase64String(app.IconBase64);
+                    using (var ms = new System.IO.MemoryStream(bytes))
+                    {
+                        pic.Image = Image.FromStream(ms);
+                    }
+                } catch { pic.Image = SystemIcons.Application.ToBitmap(); }
+            }
+            else { pic.Image = SystemIcons.Application.ToBitmap(); }
+
+            Label lblName = new Label
+            {
+                Text = app.Name,
+                Font = DesignSystem.HeaderFont,
+                ForeColor = DesignSystem.TextColor,
+                Location = new Point(60, 12),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+
+            Label lblPath = new Label
+            {
+                Text = app.Path,
+                Font = DesignSystem.SmallFont,
+                ForeColor = DesignSystem.TextDimColor,
+                Location = new Point(60, 34),
+                AutoSize = false,
+                Size = new Size(row.Width - 100, 18),
+                AutoEllipsis = true,
+                BackColor = Color.Transparent
+            };
+
+            row.Controls.Add(pic);
+            row.Controls.Add(lblName);
+            row.Controls.Add(lblPath);
+
+            // Hover effects
+            row.MouseEnter += (s, e) => row.BackColor = DesignSystem.HoverColor;
+            row.MouseLeave += (s, e) => row.BackColor = DesignSystem.SurfaceElevatedColor;
+
+            foreach (Control c in row.Controls)
+            {
+                c.Click += (s, e) => LaunchApp(app);
+                c.MouseEnter += (s, e) => row.BackColor = DesignSystem.HoverColor;
+            }
+            row.Click += (s, e) => LaunchApp(app);
+
+            // Context menu
+            ContextMenuStrip menu = new ContextMenuStrip();
+            ToolStripMenuItem removeBtn = new ToolStripMenuItem(LanguageManager.GetString("Remove"));
+            removeBtn.Click += (s, e) => RemoveApp(app);
+            menu.Items.Add(removeBtn);
+            row.ContextMenuStrip = menu;
+
+            return row;
         }
 
-        private void RefreshTray()
+        private void LaunchApp(AppItem app)
         {
-            TrayRefreshRequested?.Invoke(this, EventArgs.Empty);
+            try { Process.Start(new ProcessStartInfo(app.Path) { UseShellExecute = true }); }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
 
-        public static event EventHandler? TrayRefreshRequested;
+        private void RemoveApp(AppItem app)
+        {
+            if (_selectedCategory != null)
+            {
+                if (MessageBox.Show(LanguageManager.GetString("ConfirmDelete"), LanguageManager.GetString("Remove"), MessageBoxButtons.YesNo) == DialogResult.Yes)
+                {
+                    _selectedCategory.Items.Remove(app);
+                    ConfigManager.Save();
+                    UpdateAppList();
+                    TrayRefreshRequested?.Invoke(this, EventArgs.Empty);
+                }
+            }
+        }
 
         public void ShowForm()
         {
             this.Show();
             this.WindowState = FormWindowState.Normal;
             this.Activate();
-            tabMain.SelectedTab = tabLauncher;
         }
 
         public void ShowSettings()
         {
-            ShowForm();
-            tabMain.SelectedTab = tabSettings;
+            // For now, let's just show a simple settings dialog or reuse ManagerForm
+            // Given the task, I will implement a settings mode or dialog soon.
+            MessageBox.Show("Settings Mode Coming Soon", "TaskTray");
         }
 
         private void OnCategoryChanged(object? sender, EventArgs e)
@@ -140,6 +351,24 @@ namespace TaskTray
             UpdateAppList();
         }
 
+        private void OnSearchChanged(object? sender, EventArgs e)
+        {
+            _searchFilter = txtSearch.Text;
+            UpdateAppList();
+        }
+
+        private void OnAddProgramClicked(object? sender, EventArgs e)
+        {
+            using (var ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    AddAppToCategory(ofd.FileName);
+                }
+            }
+        }
+
         private void OnAddCategoryClicked(object? sender, EventArgs e)
         {
             string name = PromptForValue(LanguageManager.GetString("EnterCategoryName"), LanguageManager.GetString("AddCategory"));
@@ -148,7 +377,7 @@ namespace TaskTray
                 ConfigManager.Data.Categories.Add(new Category { Name = name });
                 ConfigManager.Save();
                 LoadData();
-                RefreshTray();
+                TrayRefreshRequested?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -163,7 +392,7 @@ namespace TaskTray
                 int idx = lstCategories.SelectedIndex;
                 LoadData();
                 lstCategories.SelectedIndex = idx;
-                RefreshTray();
+                TrayRefreshRequested?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -175,7 +404,7 @@ namespace TaskTray
                 ConfigManager.Data.Categories.Remove(_selectedCategory);
                 ConfigManager.Save();
                 LoadData();
-                RefreshTray();
+                TrayRefreshRequested?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -184,139 +413,21 @@ namespace TaskTray
             using (var form = new Form())
             {
                 form.Text = title;
-                form.Size = new Size(300, 150);
+                form.Size = new Size(350, 160);
                 form.FormBorderStyle = FormBorderStyle.FixedDialog;
                 form.StartPosition = FormStartPosition.CenterParent;
-                form.BackColor = DesignSystem.BackColor;
+                form.BackColor = DesignSystem.BackgroundColor;
                 form.ForeColor = DesignSystem.TextColor;
 
-                var lbl = new Label { Text = prompt, Location = new Point(10, 10), Size = new Size(280, 20) };
-                var txt = new TextBox { Text = defaultValue, Location = new Point(10, 40), Size = new Size(260, 25), BackColor = DesignSystem.SurfaceColor, ForeColor = DesignSystem.TextColor, BorderStyle = BorderStyle.FixedSingle };
-                var btn = new Button { Text = "OK", Location = new Point(190, 80), Size = new Size(80, 25), DialogResult = DialogResult.OK, FlatStyle = FlatStyle.Flat, BackColor = DesignSystem.SurfaceColor };
+                var lbl = new Label { Text = prompt, Location = new Point(20, 15), Size = new Size(310, 20) };
+                var txt = new TextBox { Text = defaultValue, Location = new Point(20, 45), Size = new Size(295, 25), BackColor = DesignSystem.SurfaceColor, ForeColor = DesignSystem.TextColor, BorderStyle = BorderStyle.FixedSingle };
+                var btn = new Button { Text = "OK", Location = new Point(235, 85), Size = new Size(80, 30), DialogResult = DialogResult.OK };
 
+                DesignSystem.ApplyDarkTheme(form);
                 form.Controls.AddRange(new Control[] { lbl, txt, btn });
                 form.AcceptButton = btn;
 
                 return form.ShowDialog() == DialogResult.OK ? txt.Text : string.Empty;
-            }
-        }
-
-        private void OnSearchChanged(object? sender, EventArgs e)
-        {
-            _searchFilter = txtSearch.Text;
-            UpdateAppList();
-        }
-
-        private void UpdateAppList()
-        {
-            flowApps.Controls.Clear();
-            
-            if (_selectedCategory == null)
-            {
-                if (ConfigManager.Data.Categories.Count == 0)
-                {
-                    flowApps.Controls.Add(new Label { Text = LanguageManager.GetString("StartupHint"), AutoSize = true, ForeColor = DesignSystem.TextDimColor, Margin = new Padding(20) });
-                }
-                return;
-            }
-
-            var items = _selectedCategory.Items.AsEnumerable();
-            if (!string.IsNullOrEmpty(_searchFilter))
-            {
-                items = items.Where(i => i.Name.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase));
-            }
-
-            foreach (var app in items)
-            {
-                flowApps.Controls.Add(CreateAppCard(app));
-            }
-
-            if (!items.Any() && string.IsNullOrEmpty(_searchFilter))
-            {
-                flowApps.Controls.Add(new Label { Text = LanguageManager.GetString("StartupHint"), AutoSize = true, ForeColor = DesignSystem.TextDimColor, Margin = new Padding(20) });
-            }
-        }
-
-        private Control CreateAppCard(AppItem app)
-        {
-            var panel = new Panel
-            {
-                Size = new Size(150, 60),
-                BackColor = DesignSystem.SurfaceColor,
-                Margin = new Padding(5),
-                Cursor = Cursors.Hand
-            };
-
-            var picIcon = new PictureBox
-            {
-                Size = new Size(32, 32),
-                Location = new Point(10, 14),
-                SizeMode = PictureBoxSizeMode.Zoom
-            };
-
-            if (!string.IsNullOrEmpty(app.IconBase64))
-            {
-                try {
-                    byte[] bytes = Convert.FromBase64String(app.IconBase64);
-                    using (var ms = new System.IO.MemoryStream(bytes))
-                    {
-                        picIcon.Image = Image.FromStream(ms);
-                    }
-                } catch { picIcon.Image = SystemIcons.Application.ToBitmap(); }
-            }
-            else { picIcon.Image = SystemIcons.Application.ToBitmap(); }
-
-            var lblName = new Label
-            {
-                Text = app.Name,
-                Location = new Point(50, 10),
-                Size = new Size(90, 40),
-                ForeColor = DesignSystem.TextColor,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            panel.Controls.Add(picIcon);
-            panel.Controls.Add(lblName);
-            
-            panel.Click += (s, e) => LaunchApp(app);
-            picIcon.Click += (s, e) => LaunchApp(app);
-            lblName.Click += (s, e) => LaunchApp(app);
-
-            // Context menu for removal
-            var menu = new ContextMenuStrip();
-            var removeBtn = new ToolStripMenuItem(LanguageManager.GetString("Remove"));
-            removeBtn.Click += (s, e) => RemoveApp(app);
-            menu.Items.Add(removeBtn);
-            panel.ContextMenuStrip = menu;
-
-            return panel;
-        }
-
-        private void LaunchApp(AppItem app)
-        {
-            try { Process.Start(new ProcessStartInfo(app.Path) { UseShellExecute = true }); }
-            catch (Exception ex) { MessageBox.Show(ex.Message); }
-        }
-
-        private void RemoveApp(AppItem app)
-        {
-            if (_selectedCategory != null)
-            {
-                _selectedCategory.Items.Remove(app);
-                ConfigManager.Save();
-                UpdateAppList();
-            }
-        }
-
-        private void OnAddProgramClicked(object? sender, EventArgs e)
-        {
-            using (var ofd = new OpenFileDialog())
-            {
-                ofd.Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*";
-                if (ofd.ShowDialog() == DialogResult.OK)
-                {
-                    AddAppToCategory(ofd.FileName);
-                }
             }
         }
 
@@ -349,7 +460,9 @@ namespace TaskTray
             _selectedCategory.Items.Add(app);
             ConfigManager.Save();
             UpdateAppList();
-            RefreshTray();
+            TrayRefreshRequested?.Invoke(this, EventArgs.Empty);
         }
+
+        public static event EventHandler? TrayRefreshRequested;
     }
 }

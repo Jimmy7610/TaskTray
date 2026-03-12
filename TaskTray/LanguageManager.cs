@@ -34,7 +34,11 @@ namespace TaskTray
                 ["DeleteCategory"] = "Delete Category",
                 ["RenameCategory"] = "Rename",
                 ["EnterCategoryName"] = "Enter category name:",
-                ["SettingsTitle"] = "TaskTray Settings"
+                ["SettingsTitle"] = "TaskTray Settings",
+                ["Import"] = "Import",
+                ["Export"] = "Export",
+                ["EmptyStateTitle"] = "No apps here yet",
+                ["EmptyStateDesc"] = "Add apps by dragging them here or using the '+' button above."
             },
             ["sv"] = new Dictionary<string, string>
             {
@@ -60,7 +64,11 @@ namespace TaskTray
                 ["DeleteCategory"] = "Ta bort kategori",
                 ["RenameCategory"] = "Byt namn",
                 ["EnterCategoryName"] = "Ange kategorinamn:",
-                ["SettingsTitle"] = "TaskTray Inställningar"
+                ["SettingsTitle"] = "TaskTray Inställningar",
+                ["Import"] = "Importera",
+                ["Export"] = "Exportera",
+                ["EmptyStateTitle"] = "Inga appar här än",
+                ["EmptyStateDesc"] = "Lägg till appar genom att dra dem hit eller använd '+'-knappen ovan."
             }
         };
 
