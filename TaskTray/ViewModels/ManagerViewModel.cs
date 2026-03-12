@@ -35,6 +35,8 @@ namespace TaskTray.ViewModels
             ImportCommand = new RelayCommand(_ => ImportConfig());
             ExportCommand = new RelayCommand(_ => ExportConfig());
 
+            OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
+
             if (Categories.Any())
                 SelectedCategory = Categories.First();
         }
@@ -74,6 +76,7 @@ namespace TaskTray.ViewModels
         public ICommand DeleteAppCommand { get; }
         public ICommand ImportCommand { get; }
         public ICommand ExportCommand { get; }
+        public ICommand OpenSettingsCommand { get; }
 
         private void UpdateAppList()
         {
@@ -98,6 +101,19 @@ namespace TaskTray.ViewModels
             
             OnPropertyChanged(nameof(HasApps));
             OnPropertyChanged(nameof(NoApps));
+        }
+
+        private void OpenSettings()
+        {
+            var win = new TaskTray.Views.SettingsWindow();
+            win.Owner = System.Windows.Application.Current.MainWindow;
+            if (win.ShowDialog() == true)
+            {
+                // Refresh anything needed if language changed etc
+                OnPropertyChanged(string.Empty); // Refresh all bindings
+                TrayService.RefreshMenu();
+                UpdateAppList(); // Refresh lists to pick up any new localized strings if any
+            }
         }
 
         private void AddCategory()
@@ -196,7 +212,7 @@ namespace TaskTray.ViewModels
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Failed to launch: {ex.Message}");
+                System.Windows.MessageBox.Show($"{LanguageService.GetString("LaunchFailed")}{ex.Message}");
             }
         }
 
@@ -258,17 +274,36 @@ namespace TaskTray.ViewModels
                 Title = title, Width = 350, Height = 170, WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen,
                 ResizeMode = System.Windows.ResizeMode.NoResize, WindowStyle = System.Windows.WindowStyle.ToolWindow,
                 Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("BackgroundBrush"),
-                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextBrush")
+                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextBrush"),
+                SizeToContent = System.Windows.SizeToContent.Height
             };
 
             var sp = new System.Windows.Controls.StackPanel { Margin = new System.Windows.Thickness(15) };
-            sp.Children.Add(new System.Windows.Controls.TextBlock { Text = prompt, Margin = new System.Windows.Thickness(0, 0, 0, 10), FontWeight = System.Windows.FontWeights.Bold });
-            var txt = new System.Windows.Controls.TextBox { Text = defaultValue, Margin = new System.Windows.Thickness(0, 0, 0, 15) };
+            sp.Children.Add(new System.Windows.Controls.TextBlock 
+            { 
+                Text = prompt, 
+                Margin = new System.Windows.Thickness(0, 0, 0, 10), 
+                FontWeight = System.Windows.FontWeights.Bold,
+                FontSize = 14
+            });
+            var txt = new System.Windows.Controls.TextBox 
+            { 
+                Text = defaultValue, 
+                Tag = "...",
+                Margin = new System.Windows.Thickness(0, 0, 0, 15) 
+            };
             sp.Children.Add(txt);
 
-            var btn = new System.Windows.Controls.Button { Content = "OK", IsDefault = true, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Padding = new System.Windows.Thickness(20, 5, 20, 5) };
+            var bts = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
+            var btn = new System.Windows.Controls.Button { Content = "OK", IsDefault = true, Padding = new System.Windows.Thickness(20, 5, 20, 5), Margin = new System.Windows.Thickness(0,0,8,0) };
             btn.Click += (s, e) => { win.DialogResult = true; win.Close(); };
-            sp.Children.Add(btn);
+            
+            var btnCancel = new System.Windows.Controls.Button { Content = LanguageService.GetString("Cancel"), Padding = new System.Windows.Thickness(20, 5, 20, 5) };
+            btnCancel.Click += (s, e) => { win.DialogResult = false; win.Close(); };
+            
+            bts.Children.Add(btn);
+            bts.Children.Add(btnCancel);
+            sp.Children.Add(bts);
 
             win.Content = sp;
             txt.Focus();

@@ -15,7 +15,7 @@ namespace TaskTray
             _mutex = new Mutex(true, AppGuid, out bool createdNew);
             if (!createdNew)
             {
-                System.Windows.MessageBox.Show("TaskTray is already running.");
+                System.Windows.MessageBox.Show(LanguageService.GetString("AlreadyRunning"));
                 System.Windows.Application.Current.Shutdown();
                 return;
             }

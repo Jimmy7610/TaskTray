@@ -1,12 +1,31 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 namespace TaskTray.Services
 {
-    public static class LanguageService
+    public class LanguageService : INotifyPropertyChanged
     {
-        public static string CurrentLanguage { get; private set; } = "en";
+        private static LanguageService _instance = new();
+        public static LanguageService Instance => _instance;
+
+        private string _currentLanguage = "en";
+        public string CurrentLanguage
+        {
+            get => _currentLanguage;
+            private set
+            {
+                if (_currentLanguage != value)
+                {
+                    _currentLanguage = value;
+                    OnPropertyChanged(null); // Notify everything changed
+                }
+            }
+        }
+
+        public string this[string key] => GetString(key);
 
         private static readonly Dictionary<string, Dictionary<string, string>> Translations = new()
         {
@@ -38,7 +57,9 @@ namespace TaskTray.Services
                 ["Import"] = "Import",
                 ["Export"] = "Export",
                 ["EmptyStateTitle"] = "No apps here yet",
-                ["EmptyStateDesc"] = "Add apps by dragging them here or using the '+' button above."
+                ["EmptyStateDesc"] = "Add apps by dragging them here or using the '+' button above.",
+                ["AlreadyRunning"] = "TaskTray is already running.",
+                ["LaunchFailed"] = "Failed to launch: "
             },
             ["sv"] = new Dictionary<string, string>
             {
@@ -68,7 +89,9 @@ namespace TaskTray.Services
                 ["Import"] = "Importera",
                 ["Export"] = "Exportera",
                 ["EmptyStateTitle"] = "Inga appar här än",
-                ["EmptyStateDesc"] = "Lägg till appar genom att dra dem hit eller använd '+'-knappen ovan."
+                ["EmptyStateDesc"] = "Lägg till appar genom att dra dem hit eller använd '+'-knappen ovan.",
+                ["AlreadyRunning"] = "TaskTray körs redan.",
+                ["LaunchFailed"] = "Misslyckades att starta: "
             }
         };
 
@@ -80,13 +103,14 @@ namespace TaskTray.Services
             if (string.IsNullOrEmpty(target))
                 target = Translations.ContainsKey(systemLang) ? systemLang : "en";
 
-            CurrentLanguage = target;
+            _instance.CurrentLanguage = target;
         }
 
         public static string GetString(string key)
         {
-            if (Translations.ContainsKey(CurrentLanguage) && Translations[CurrentLanguage].ContainsKey(key))
-                return Translations[CurrentLanguage][key];
+            var current = _instance.CurrentLanguage;
+            if (Translations.ContainsKey(current) && Translations[current].ContainsKey(key))
+                return Translations[current][key];
 
             // Fallback to English
             if (Translations["en"].ContainsKey(key))
@@ -99,10 +123,16 @@ namespace TaskTray.Services
         {
             if (Translations.ContainsKey(lang))
             {
-                CurrentLanguage = lang;
+                _instance.CurrentLanguage = lang;
                 ConfigService.Data.Language = lang;
                 ConfigService.Save();
             }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }
