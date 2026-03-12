@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace TaskTray
+namespace TaskTray.Services
 {
-    public static class LanguageManager
+    public static class LanguageService
     {
         public static string CurrentLanguage { get; private set; } = "en";
 
-        private static readonly Dictionary<string, Dictionary<string, string>> Translations = new Dictionary<string, Dictionary<string, string>>
+        private static readonly Dictionary<string, Dictionary<string, string>> Translations = new()
         {
             ["en"] = new Dictionary<string, string>
             {
@@ -20,8 +20,8 @@ namespace TaskTray
                 ["Remove"] = "Remove",
                 ["Search"] = "Search apps...",
                 ["Categories"] = "Categories",
-                ["Apps"] = "Applications",
-                ["StartupHint"] = "Drag programs here to start organizing",
+                ["Apps"] = "Apps",
+                ["StartupHint"] = "Drag apps here to start organizing",
                 ["Language"] = "Language",
                 ["AutoStart"] = "Run at Windows startup",
                 ["Save"] = "Save",
@@ -72,18 +72,27 @@ namespace TaskTray
             }
         };
 
-        public static void Initialize(string? preferredLanguage = null)
+        public static void Initialize()
         {
-            if (!string.IsNullOrEmpty(preferredLanguage) && Translations.ContainsKey(preferredLanguage))
-            {
-                CurrentLanguage = preferredLanguage;
-            }
-            else
-            {
-                // Detect from system
-                var culture = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-                CurrentLanguage = Translations.ContainsKey(culture) ? culture : "en";
-            }
+            string systemLang = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            string target = ConfigService.Data.Language;
+
+            if (string.IsNullOrEmpty(target))
+                target = Translations.ContainsKey(systemLang) ? systemLang : "en";
+
+            CurrentLanguage = target;
+        }
+
+        public static string GetString(string key)
+        {
+            if (Translations.ContainsKey(CurrentLanguage) && Translations[CurrentLanguage].ContainsKey(key))
+                return Translations[CurrentLanguage][key];
+
+            // Fallback to English
+            if (Translations["en"].ContainsKey(key))
+                return Translations["en"][key];
+
+            return $"[{key}]";
         }
 
         public static void SetLanguage(string lang)
@@ -91,19 +100,9 @@ namespace TaskTray
             if (Translations.ContainsKey(lang))
             {
                 CurrentLanguage = lang;
+                ConfigService.Data.Language = lang;
+                ConfigService.Save();
             }
-        }
-
-        public static string GetString(string key)
-        {
-            if (Translations[CurrentLanguage].TryGetValue(key, out var text))
-                return text;
-            
-            // Fallback to English if key missing in current lang
-            if (CurrentLanguage != "en" && Translations["en"].TryGetValue(key, out var engText))
-                return engText;
-
-            return key;
         }
     }
 }
