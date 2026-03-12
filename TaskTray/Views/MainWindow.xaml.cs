@@ -14,17 +14,17 @@ namespace TaskTray.Views
             this.Drop += OnDrop;
         }
 
-        private void OnDragEnter(object sender, DragEventArgs e)
+        private void OnDragEnter(object sender, System.Windows.DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-                e.Effects = DragDropEffects.Copy;
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
+                e.Effects = System.Windows.DragDropEffects.Copy;
         }
 
-        private void OnDrop(object sender, DragEventArgs e)
+        private void OnDrop(object sender, System.Windows.DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
             {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
                 if (DataContext is ManagerViewModel vm)
                 {
                     foreach (string file in files)

@@ -3,10 +3,11 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Controls;
 using System.Diagnostics;
 using TaskTray.Models;
 using TaskTray.Services;
-using Microsoft.Win32;
 
 namespace TaskTray.ViewModels
 {
@@ -101,7 +102,6 @@ namespace TaskTray.ViewModels
 
         private void AddCategory()
         {
-            // Simple prompt for category name
             string name = InteractionUtils.ShowInputBox(
                 LanguageService.GetString("EnterCategoryName"), 
                 LanguageService.GetString("AddCategory"));
@@ -121,7 +121,7 @@ namespace TaskTray.ViewModels
         {
             if (SelectedCategory == null) return;
 
-            OpenFileDialog ofd = new OpenFileDialog
+            var ofd = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*",
                 Title = LanguageService.GetString("AddProgram")
@@ -164,7 +164,6 @@ namespace TaskTray.ViewModels
             {
                 SelectedCategory.Name = name;
                 ConfigService.Save();
-                // Refresh binding
                 int idx = Categories.IndexOf(SelectedCategory);
                 Categories[idx] = SelectedCategory;
                 SelectedCategory = Categories[idx];
@@ -176,9 +175,9 @@ namespace TaskTray.ViewModels
         {
             if (SelectedCategory == null) return;
 
-            if (MessageBox.Show(LanguageService.GetString("ConfirmDelete"), 
+            if (System.Windows.MessageBox.Show(LanguageService.GetString("ConfirmDelete"), 
                 LanguageService.GetString("DeleteCategory"), 
-                MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                System.Windows.MessageBoxButton.YesNo) == System.Windows.MessageBoxResult.Yes)
             {
                 ConfigService.Data.Categories.Remove(SelectedCategory);
                 Categories.Remove(SelectedCategory);
@@ -197,7 +196,7 @@ namespace TaskTray.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to launch: {ex.Message}");
+                System.Windows.MessageBox.Show($"Failed to launch: {ex.Message}");
             }
         }
 
@@ -205,9 +204,9 @@ namespace TaskTray.ViewModels
         {
             if (app != null && SelectedCategory != null)
             {
-                if (MessageBox.Show(LanguageService.GetString("ConfirmDelete"), 
+                if (System.Windows.MessageBox.Show(LanguageService.GetString("ConfirmDelete"), 
                     LanguageService.GetString("Remove"), 
-                    MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                    System.Windows.MessageBoxButton.YesNo) == System.Windows.MessageBoxResult.Yes)
                 {
                     SelectedCategory.Items.Remove(app);
                     ConfigService.Save();
@@ -219,26 +218,24 @@ namespace TaskTray.ViewModels
 
         private void ImportConfig()
         {
-            OpenFileDialog ofd = new OpenFileDialog { Filter = "JSON Files (*.json)|*.json" };
+            var ofd = new Microsoft.Win32.OpenFileDialog { Filter = "JSON Files (*.json)|*.json" };
             if (ofd.ShowDialog() == true)
             {
                 try
                 {
-                    ConfigService.Load(); // Refresh local data from file if needed, or replace directly
-                    // For logic simplicity here, we assume standard load
-                    // Full implementation depends on ConfigService.Load() behavior
+                    ConfigService.Load();
                     Categories.Clear();
                     foreach (var cat in ConfigService.Data.Categories) Categories.Add(cat);
                     SelectedCategory = Categories.FirstOrDefault();
                     TrayService.RefreshMenu();
                 }
-                catch (Exception ex) { MessageBox.Show($"Import failed: {ex.Message}"); }
+                catch (Exception ex) { System.Windows.MessageBox.Show($"Import failed: {ex.Message}"); }
             }
         }
 
         private void ExportConfig()
         {
-            SaveFileDialog sfd = new SaveFileDialog { Filter = "JSON Files (*.json)|*.json", FileName = "tasktray_config.json" };
+            var sfd = new Microsoft.Win32.SaveFileDialog { Filter = "JSON Files (*.json)|*.json", FileName = "tasktray_config.json" };
             if (sfd.ShowDialog() == true)
             {
                 try
@@ -247,7 +244,7 @@ namespace TaskTray.ViewModels
                     string json = System.Text.Json.JsonSerializer.Serialize(ConfigService.Data, options);
                     System.IO.File.WriteAllText(sfd.FileName, json);
                 }
-                catch (Exception ex) { MessageBox.Show($"Export failed: {ex.Message}"); }
+                catch (Exception ex) { System.Windows.MessageBox.Show($"Export failed: {ex.Message}"); }
             }
         }
     }
@@ -256,21 +253,20 @@ namespace TaskTray.ViewModels
     {
         public static string ShowInputBox(string prompt, string title, string defaultValue = "")
         {
-            // Minimalist WPF Input Box
-            Window win = new Window
+            var win = new System.Windows.Window
             {
-                Title = title, Width = 350, Height = 170, WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.ToolWindow,
-                Background = (Brush)Application.Current.FindResource("BackgroundBrush"),
-                Foreground = (Brush)Application.Current.FindResource("TextBrush")
+                Title = title, Width = 350, Height = 170, WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen,
+                ResizeMode = System.Windows.ResizeMode.NoResize, WindowStyle = System.Windows.WindowStyle.ToolWindow,
+                Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("BackgroundBrush"),
+                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextBrush")
             };
 
-            StackPanel sp = new StackPanel { Margin = new Thickness(15) };
-            sp.Children.Add(new TextBlock { Text = prompt, Margin = new Thickness(0, 0, 0, 10), FontWeight = FontWeights.Bold });
-            TextBox txt = new TextBox { Text = defaultValue, Margin = new Thickness(0, 0, 0, 15) };
+            var sp = new System.Windows.Controls.StackPanel { Margin = new System.Windows.Thickness(15) };
+            sp.Children.Add(new System.Windows.Controls.TextBlock { Text = prompt, Margin = new System.Windows.Thickness(0, 0, 0, 10), FontWeight = System.Windows.FontWeights.Bold });
+            var txt = new System.Windows.Controls.TextBox { Text = defaultValue, Margin = new System.Windows.Thickness(0, 0, 0, 15) };
             sp.Children.Add(txt);
 
-            Button btn = new Button { Content = "OK", IsDefault = true, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(20, 5, 20, 5) };
+            var btn = new System.Windows.Controls.Button { Content = "OK", IsDefault = true, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Padding = new System.Windows.Thickness(20, 5, 20, 5) };
             btn.Click += (s, e) => { win.DialogResult = true; win.Close(); };
             sp.Children.Add(btn);
 

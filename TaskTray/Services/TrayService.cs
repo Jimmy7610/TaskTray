@@ -45,7 +45,7 @@ namespace TaskTray.Services
             
             menu.Items.Add(new ToolStripSeparator());
 
-            // Exit
+            // Exit (Explicit Application reference to avoid WinForms collision)
             menu.Items.Add(new ToolStripMenuItem(LanguageService.GetString("Exit"), null, (s, e) => System.Windows.Application.Current.Shutdown()));
 
             _notifyIcon.ContextMenuStrip = menu;
@@ -84,21 +84,24 @@ namespace TaskTray.Services
 
         private static void ShowManager()
         {
-            if (_mainWindow == null)
-            {
-                _mainWindow = new MainWindow();
-                _mainWindow.Closed += (s, e) => _mainWindow = null;
-            }
-            
-            _mainWindow.Show();
-            _mainWindow.Activate();
-            _mainWindow.Focus();
+            // Explicit Dispatcher call for UI thread safety or standard instantiation if already on UI thread
+            System.Windows.Application.Current.Dispatcher.Invoke(() => {
+                if (_mainWindow == null)
+                {
+                    _mainWindow = new MainWindow();
+                    _mainWindow.Closed += (s, e) => _mainWindow = null;
+                }
+                
+                _mainWindow.Show();
+                _mainWindow.Activate();
+                _mainWindow.Focus();
+            });
         }
 
         private static void LaunchApp(string path)
         {
             try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-            catch (Exception ex) { MessageBox.Show($"Failed to launch: {ex.Message}"); }
+            catch (Exception ex) { System.Windows.MessageBox.Show($"Failed to launch: {ex.Message}"); }
         }
 
         public static void Shutdown()
